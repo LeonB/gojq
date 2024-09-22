@@ -18,7 +18,7 @@ func prependFuncDef(xs []*FuncDef, x *FuncDef) []*FuncDef {
 
 %union {
   value    any
-  token    string
+  token    Token
   operator Operator
 }
 
@@ -85,11 +85,11 @@ imports
 import
     : tokImport tokString tokAs tokIdentVariable meta ';'
     {
-        $$ = &Import{ImportPath: $2, ImportAlias: $4, Meta: $5.(*ConstObject)}
+        $$ = &Import{ImportPath: $2.Str, ImportAlias: $4.Str, Meta: $5.(*ConstObject)}
     }
     | tokInclude tokString meta ';'
     {
-        $$ = &Import{IncludePath: $2, Meta: $3.(*ConstObject)}
+        $$ = &Import{IncludePath: $2.Str, Meta: $3.(*ConstObject)}
     }
 
 meta
@@ -119,21 +119,21 @@ funcdefs
 funcdef
     : tokDef tokIdent ':' query ';'
     {
-        $$ = &FuncDef{Name: $2, Body: $4.(*Query)}
+        $$ = &FuncDef{Name: $2.Str, Body: $4.(*Query)}
     }
     | tokDef tokIdent '(' funcargs ')' ':' query ';'
     {
-        $$ = &FuncDef{$2, $4.([]string), $7.(*Query)}
+        $$ = &FuncDef{Name: $2.Str, Args: $4.([]string), Body: $7.(*Query)}
     }
 
 funcargs
     : tokIdentVariable
     {
-        $$ = []string{$1}
+        $$ = []string{$1.Str}
     }
     | funcargs ';' tokIdentVariable
     {
-        $$ = append($1.([]string), $3)
+        $$ = append($1.([]string), $3.Str)
     }
 
 tokIdentVariable
@@ -159,7 +159,7 @@ query
     }
     | tokLabel tokVariable '|' query
     {
-        $$ = &Query{Term: &Term{Type: TermTypeLabel, Label: &Label{$2, $4.(*Query)}}}
+        $$ = &Query{Term: &Term{Type: TermTypeLabel, Label: &Label{$2.Str, $4.(*Query)}}}
     }
     | query ',' query
     {
@@ -226,7 +226,7 @@ bindpatterns
 pattern
     : tokVariable
     {
-        $$ = &Pattern{Name: $1}
+        $$ = &Pattern{Name: $1.Str}
     }
     | '[' arraypatterns ']'
     {
@@ -260,7 +260,7 @@ objectpatterns
 objectpattern
     : objectkey ':' pattern
     {
-        $$ = &PatternObject{Key: $1, Val: $3.(*Pattern)}
+        $$ = &PatternObject{Key: $1.Str, Val: $3.(*Pattern)}
     }
     | string ':' pattern
     {
@@ -272,7 +272,7 @@ objectpattern
     }
     | tokVariable
     {
-        $$ = &PatternObject{Key: $1}
+        $$ = &PatternObject{Key: $1.Str}
     }
 
 term
@@ -286,7 +286,7 @@ term
     }
     | tokIndex
     {
-        $$ = &Term{Type: TermTypeIndex, Index: &Index{Name: $1}}
+        $$ = &Term{Type: TermTypeIndex, Index: &Index{Name: $1.Str}}
     }
     | '.' suffix
     {
@@ -315,15 +315,15 @@ term
     }
     | tokIdentModuleIdent
     {
-        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1}}
+        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str}}
     }
     | tokIdentModuleIdent '(' args ')'
     {
-        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1, Args: $3.([]*Query)}}
+        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str, Args: $3.([]*Query)}}
     }
     | tokVariableModuleVariable
     {
-        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1}}
+        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str}}
     }
     | '{' '}'
     {
@@ -347,7 +347,7 @@ term
     }
     | tokNumber
     {
-        $$ = &Term{Type: TermTypeNumber, Number: $1}
+        $$ = &Term{Type: TermTypeNumber, Number: $1.Str}
     }
     | '+' term
     {
@@ -359,11 +359,11 @@ term
     }
     | tokFormat
     {
-        $$ = &Term{Type: TermTypeFormat, Format: $1}
+        $$ = &Term{Type: TermTypeFormat, Format: $1.Str}
     }
     | tokFormat string
     {
-        $$ = &Term{Type: TermTypeFormat, Format: $1, Str: $2.(*String)}
+        $$ = &Term{Type: TermTypeFormat, Format: $1.Str, Str: $2.(*String)}
     }
     | string
     {
@@ -391,7 +391,7 @@ term
     }
     | tokBreak tokVariable
     {
-        $$ = &Term{Type: TermTypeBreak, Break: $2}
+        $$ = &Term{Type: TermTypeBreak, Break: $2.Str}
     }
     | '(' query ')'
     {
@@ -399,7 +399,7 @@ term
     }
     | term tokIndex
     {
-        $1.(*Term).SuffixList = append($1.(*Term).SuffixList, &Suffix{Index: &Index{Name: $2}})
+        $1.(*Term).SuffixList = append($1.(*Term).SuffixList, &Suffix{Index: &Index{Name: $2.Str}})
     }
     | term suffix
     {
@@ -421,7 +421,7 @@ term
 string
     : tokString
     {
-        $$ = &String{Str: $1}
+        $$ = &String{Str: $1.Str}
     }
     | tokStringStart stringparts tokStringEnd
     {
@@ -435,7 +435,7 @@ stringparts
     }
     | stringparts tokString
     {
-        $$ = append($1.([]*Query), &Query{Term: &Term{Type: TermTypeString, Str: &String{Str: $2}}})
+        $$ = append($1.([]*Query), &Query{Term: &Term{Type: TermTypeString, Str: &String{Str: $2.Str}}})
     }
     | stringparts tokStringQuery query ')'
     {
@@ -526,7 +526,7 @@ objectkeyvals
 objectkeyval
     : objectkey ':' objectval
     {
-        $$ = &ObjectKeyVal{Key: $1, Val: $3.(*Query)}
+        $$ = &ObjectKeyVal{Key: $1.Str, Val: $3.(*Query)}
     }
     | string ':' objectval
     {
@@ -538,7 +538,7 @@ objectkeyval
     }
     | objectkey
     {
-        $$ = &ObjectKeyVal{Key: $1}
+        $$ = &ObjectKeyVal{Key: $1.Str}
     }
     | string
     {
@@ -568,11 +568,11 @@ constterm
     }
     | tokNumber
     {
-        $$ = &ConstTerm{Number: $1}
+        $$ = &ConstTerm{Number: $1.Str}
     }
     | tokString
     {
-        $$ = &ConstTerm{Str: $1}
+        $$ = &ConstTerm{Str: $1.Str}
     }
     | tokNull
     {
@@ -614,15 +614,15 @@ constobjectkeyvals
 constobjectkeyval
     : tokIdent ':' constterm
     {
-        $$ = &ConstObjectKeyVal{Key: $1, Val: $3.(*ConstTerm)}
+        $$ = &ConstObjectKeyVal{Key: $1.Str, Val: $3.(*ConstTerm)}
     }
     | tokKeyword ':' constterm
     {
-        $$ = &ConstObjectKeyVal{Key: $1, Val: $3.(*ConstTerm)}
+        $$ = &ConstObjectKeyVal{Key: $1.Str, Val: $3.(*ConstTerm)}
     }
     | tokString ':' constterm
     {
-        $$ = &ConstObjectKeyVal{KeyString: $1, Val: $3.(*ConstTerm)}
+        $$ = &ConstObjectKeyVal{KeyString: $1.Str, Val: $3.(*ConstTerm)}
     }
 
 constarray
