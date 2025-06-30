@@ -1,6 +1,14 @@
 package gojq
 
-import "strconv"
+import (
+	"fmt"
+	"log"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
+)
 
 // ValueError is an interface for errors with a value for internal function.
 // Return an error implementing this interface when you want to catch error
@@ -379,4 +387,146 @@ func typeErrorPreview(v any) string {
 	default:
 		return TypeOf(v) + " (" + Preview(v) + ")"
 	}
+}
+
+type ErrorWithLocation struct {
+	Inner           error
+	Location        Location
+	Fname, Contents string
+}
+
+// Error is mark the struct as an error.
+func (err *ErrorWithLocation) Error() string {
+	inner := err.Inner.Error()
+	linestr, line, column := GetLineByOffset(err.Contents, err.Location.Start)
+	if linestr == "" {
+		return inner
+	}
+	log.Println(err.Location.Start)
+	log.Println(err.Location.End)
+
+	if err.Fname != "<arg>" || ContainsNewline(err.Contents) {
+		return fmt.Sprintf("%s:%d\n%s  %s",
+			err.Fname, line, FormatLineInfo(linestr, line, column), inner)
+	}
+
+	return fmt.Sprintf("invalid query: %s\n    %s\n    %*c  %s",
+		err.Contents, linestr, column+1, '^', inner)
+
+	// return "expected an object but got: " + typeErrorPreview(err.v)
+}
+
+// Unwrap is used to make it work with errors.Is, errors.As.
+func (e *ErrorWithLocation) Unwrap() error {
+	// Return the inner error.
+	return e.Inner
+}
+
+func GetLineByOffset(str string, offset int) (linestr string, line, column int) {
+	ss := &stringScanner{str, 0}
+	for {
+		str, start, ok := ss.next()
+		if !ok {
+			offset -= start
+			break
+		}
+		line++
+		linestr = str
+		if ss.offset >= offset {
+			offset -= start
+			break
+		}
+	}
+	offset = min(max(offset-1, 0), len(linestr))
+	if offset > 48 {
+		skip := len(trimLastInvalidRune(linestr[:offset-48]))
+		linestr = linestr[skip:]
+		offset -= skip
+	}
+	linestr = trimLastInvalidRune(linestr[:min(64, len(linestr))])
+	if offset < len(linestr) {
+		offset = len(trimLastInvalidRune(linestr[:offset]))
+	} else {
+		offset = len(linestr)
+	}
+	column = runewidth.StringWidth(linestr[:offset])
+	return
+}
+
+func GetLineByLine(str string, line int) (linestr string) {
+	ss := &stringScanner{str, 0}
+	for {
+		str, _, ok := ss.next()
+		if !ok {
+			break
+		}
+		if line--; line == 0 {
+			linestr = str
+			break
+		}
+	}
+	if len(linestr) > 64 {
+		linestr = trimLastInvalidRune(linestr[:64])
+	}
+	return
+}
+
+func trimLastInvalidRune(s string) string {
+	for i := len(s) - 1; i >= 0 && i > len(s)-utf8.UTFMax; i-- {
+		if b := s[i]; b < utf8.RuneSelf {
+			return s[:i+1]
+		} else if utf8.RuneStart(b) {
+			if r, _ := utf8.DecodeRuneInString(s[i:]); r == utf8.RuneError {
+				return s[:i]
+			}
+			break
+		}
+	}
+	return s
+}
+
+func FormatLineInfo(linestr string, line, column int) string {
+	l := strconv.Itoa(line)
+	return fmt.Sprintf("    %s | %s\n    %*c", l, linestr, column+len(l)+4, '^')
+}
+
+type stringScanner struct {
+	str    string
+	offset int
+}
+
+func (ss *stringScanner) next() (line string, start int, ok bool) {
+	if ss.offset == len(ss.str) {
+		return
+	}
+	start, ok = ss.offset, true
+	line = ss.str[start:]
+	i := indexNewline(line)
+	if i < 0 {
+		ss.offset = len(ss.str)
+		return
+	}
+	line = line[:i]
+	if strings.HasPrefix(ss.str[start+i:], "\r\n") {
+		i++
+	}
+	ss.offset += i + 1
+	return
+}
+
+// Faster than strings.ContainsAny(str, "\r\n").
+func ContainsNewline(str string) bool {
+	return strings.IndexByte(str, '\n') >= 0 ||
+		strings.IndexByte(str, '\r') >= 0
+}
+
+// Faster than strings.IndexAny(str, "\r\n").
+func indexNewline(str string) (i int) {
+	if i = strings.IndexByte(str, '\n'); i >= 0 {
+		str = str[:i]
+	}
+	if j := strings.IndexByte(str, '\r'); j >= 0 {
+		i = j
+	}
+	return
 }

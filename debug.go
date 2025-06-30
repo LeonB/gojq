@@ -207,3 +207,7 @@ func debugValue(v any) string {
 		return Preview(v)
 	}
 }
+
+func (env *env) debugSymbolTable() {
+	env.symbolTable.debug()
+}

@@ -286,7 +286,7 @@ term
     }
     | tokIndex
     {
-        $$ = &Term{Type: TermTypeIndex, Index: &Index{Name: $1.Str}}
+        $$ = &Term{Type: TermTypeIndex, Index: &Index{Name: $1.Str, Location: $1.Location}}
     }
     | '.' suffix
     {
@@ -315,15 +315,15 @@ term
     }
     | tokIdentModuleIdent
     {
-        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str}}
+        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str, Location: $1.Location}}
     }
     | tokIdentModuleIdent '(' args ')'
     {
-        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str, Args: $3.([]*Query)}}
+        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str, Location: $1.Location, Args: $3.([]*Query)}}
     }
     | tokVariableModuleVariable
     {
-        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str}}
+        $$ = &Term{Type: TermTypeFunc, Func: &Func{Name: $1.Str, Location: $1.Location}}
     }
     | '{' '}'
     {
@@ -399,7 +399,7 @@ term
     }
     | term tokIndex
     {
-        $1.(*Term).SuffixList = append($1.(*Term).SuffixList, &Suffix{Index: &Index{Name: $2.Str}})
+        $1.(*Term).SuffixList = append($1.(*Term).SuffixList, &Suffix{Index: &Index{Name: $2.Str, Location: $2.Location}})
     }
     | term suffix
     {

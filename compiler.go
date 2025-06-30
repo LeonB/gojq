@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,13 +21,47 @@ type compiler struct {
 	builtinScope  *scopeinfo
 	scopes        []*scopeinfo
 	scopecnt      int
+	symbolTable   SymbolTable
+}
+
+type SymbolTable []Symbol
+
+func (s SymbolTable) String() string {
+	var sb strings.Builder
+	fmt.Fprintln(&sb, strings.Repeat("-", 40))
+	for _, sym := range s {
+		fmt.Fprintln(&sb, sym.pc, ": ", sym.Location)
+	}
+	fmt.Fprintln(&sb, strings.Repeat("-", 40))
+
+	return sb.String()
+}
+
+func (s SymbolTable) debug() {
+	for _, sym := range s {
+		fmt.Fprintf(debugOut, "\t%d\t%d...%d\n", sym.pc, sym.Location.Start, sym.Location.End)
+	}
+	fmt.Fprintln(debugOut, "\t"+strings.Repeat("-", 40)+"+")
+}
+
+func (s SymbolTable) Lookup(pc int) Symbol {
+	if i := sort.Search(len(s), func(i int) bool { return s[i].pc == pc }) - 1; i >= 0 {
+		return s[i]
+	}
+	return Symbol{}
+}
+
+type Symbol struct {
+	pc       int // program counter
+	Location Location
 }
 
 // Code is a compiled jq query.
 type Code struct {
-	variables []string
-	codes     []*code
-	codeinfos []codeinfo
+	variables   []string
+	codes       []*code
+	codeinfos   []codeinfo
+	symbolTable SymbolTable
 }
 
 // Run runs the code with the variable values (which should be in the
@@ -113,9 +148,10 @@ func Compile(q *Query, options ...CompilerOption) (*Code, error) {
 	c.optimizeTailRec()
 	c.optimizeCodeOps()
 	return &Code{
-		variables: c.variables,
-		codes:     c.codes,
-		codeinfos: c.codeinfos,
+		variables:   c.variables,
+		codes:       c.codes,
+		codeinfos:   c.codeinfos,
+		symbolTable: c.symbolTable,
 	}, nil
 }
 
@@ -877,10 +913,12 @@ func (c *compiler) compileIndex(e *Term, x *Index) error {
 			return err
 		}
 		c.appendCodeInfo(x)
+		c.appendSymbolTable(x, x.Location)
 		c.append(&code{op: opindex, v: k})
 		return nil
 	}
 	c.appendCodeInfo(x)
+	c.appendSymbolTable(x, x.Location)
 	if x.Str != nil {
 		return c.compileCall("_index", []*Query{{Term: e}, {Term: &Term{Type: TermTypeString, Str: x.Str}}})
 	}
@@ -899,6 +937,8 @@ func (c *compiler) compileIndex(e *Term, x *Index) error {
 func (c *compiler) compileFunc(e *Func) error {
 	if len(e.Args) == 0 {
 		if f, v := c.lookupFuncOrVariable(e.Name); f != nil {
+			log.Println("FML4")
+			c.appendSymbolTable(e, e.Location)
 			return c.compileCallPc(f, e.Args)
 		} else if v != nil {
 			if e.Name[0] == '$' {
@@ -928,12 +968,16 @@ func (c *compiler) compileFunc(e *Func) error {
 			s := c.scopes[i]
 			for j := len(s.funcs) - 1; j >= 0; j-- {
 				if f := s.funcs[j]; f.name == e.Name && f.argcnt == len(e.Args) {
+					log.Println("FML3")
+					c.appendSymbolTable(e, e.Location)
 					return c.compileCallPc(f, e.Args)
 				}
 			}
 		}
 	}
 	if f := c.lookupBuiltin(e.Name, len(e.Args)); f != nil {
+		log.Println("FML2")
+		c.appendSymbolTable(e, e.Location)
 		return c.compileCallPc(f, e.Args)
 	}
 	if fds, ok := builtinFuncDefs[e.Name]; ok {
@@ -954,7 +998,13 @@ func (c *compiler) compileFunc(e *Func) error {
 			}
 		}
 		if f := c.lookupBuiltin(e.Name, len(e.Args)); f != nil {
-			return c.compileCallPc(f, e.Args)
+			log.Println("FML1")
+			log.Println(e.Name)
+			log.Println(len(c.codes))
+			log.Println(len(c.codes))
+			err := c.compileCallPc(f, e.Args)
+			c.symbolTable = append(c.symbolTable, Symbol{pc: len(c.codes)-1, Location: e.Location})
+			return err
 		}
 	}
 	if fn, ok := internalFuncs[e.Name]; ok && fn.accept(len(e.Args)) {
@@ -1489,7 +1539,9 @@ func (c *compiler) compileTermSuffix(e *Term, s *Suffix) error {
 		if err := c.compileTerm(e); err != nil {
 			return err
 		}
+		log.Println(e, s, opiter)
 		c.append(&code{op: opiter})
+		c.appendSymbolTable(e, e.Location)
 		return nil
 	} else if s.Optional {
 		if len(e.SuffixList) > 0 {
@@ -1606,6 +1658,11 @@ func (c *compiler) compileCallInternal(
 }
 
 func (c *compiler) append(code *code) {
+	// pc := len(c.codes)
+	// if pc == 28 {
+	// 	dbg.PrintStack()
+	// 	os.Exit(90)
+	// }
 	c.codes = append(c.codes, code)
 }
 
@@ -1685,4 +1742,21 @@ func (c *compiler) optimizeCodeOps() {
 		}
 		next = code
 	}
+}
+
+func (c *compiler) appendSymbolTable(x any, loc Location) {
+	var name string
+	switch x := x.(type) {
+	case string:
+		name = x
+	default:
+		name = fmt.Sprint(x)
+	}
+
+	var diff int
+	if c.codes[len(c.codes)-1] != nil && c.codes[len(c.codes)-1].op == opret && strings.HasPrefix(name, "end of ") {
+		diff = -1
+	}
+	log.Println(diff)
+	c.symbolTable = append(c.symbolTable, Symbol{pc: len(c.codes) + diff, Location: loc})
 }

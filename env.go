@@ -3,20 +3,21 @@ package gojq
 import "context"
 
 type env struct {
-	pc        int
-	stack     *stack
-	paths     *stack
-	scopes    *scopeStack
-	values    []any
-	codes     []*code
-	codeinfos []codeinfo
-	forks     []fork
-	backtrack bool
-	offset    int
-	expdepth  int
-	label     int
-	args      [32]any // len(env.args) > maxarity
-	ctx       context.Context
+	pc          int
+	stack       *stack
+	paths       *stack
+	scopes      *scopeStack
+	values      []any
+	codes       []*code
+	codeinfos   []codeinfo
+	symbolTable SymbolTable
+	forks       []fork
+	backtrack   bool
+	offset      int
+	expdepth    int
+	label       int
+	args        [32]any // len(env.args) > maxarity
+	ctx         context.Context
 }
 
 func newEnv(ctx context.Context) *env {

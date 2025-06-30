@@ -20,7 +20,11 @@ func newLexer(src string) *lexer {
 }
 
 type Token struct {
-	Str   string
+	Str      string
+	Location Location
+}
+
+type Location struct {
 	Start int
 	End   int
 }
@@ -52,11 +56,6 @@ var keywords = map[string]int{
 }
 
 func (l *lexer) Lex(lval *yySymType) (tokenType int) {
-	defer func() {
-		l.tokenType = tokenType
-		lval.token.Start = l.offset
-		lval.token.End = l.offset
-	}()
 	if len(l.source) == l.offset {
 		l.token = ""
 		return eof
@@ -69,8 +68,15 @@ func (l *lexer) Lex(lval *yySymType) (tokenType int) {
 	ch, iseof := l.next()
 	if iseof {
 		l.token = ""
+
 		return eof
 	}
+
+	defer func() {
+		lval.token.Location.Start = l.offset - len(lval.token.Str)
+		lval.token.Location.End = l.offset
+	}()
+
 	switch {
 	case isIdent(ch, false):
 		i := l.offset - 1
@@ -250,6 +256,7 @@ func (l *lexer) Lex(lval *yySymType) (tokenType int) {
 			l.token = string(r)
 		}
 	}
+
 	return int(ch)
 }
 

@@ -232,6 +232,7 @@ Usage:
 	if err != nil {
 		return &queryParseError{fname, arg, err}
 	}
+
 	modulePaths := opts.ModulePaths
 	if len(modulePaths) == 0 && addDefaultModulePaths {
 		modulePaths = []string{"~/.jq", "$ORIGIN/../lib/gojq", "$ORIGIN/../lib"}
@@ -274,7 +275,17 @@ Usage:
 	if opts.InputNull {
 		iter = newNullInputIter()
 	}
-	return cli.process(iter, code)
+	err = cli.process(iter, code)
+
+	// append filename & contents if it's an ErrorWithLocation type
+	errWithLocation := &gojq.ErrorWithLocation{}
+	if ok := errors.As(err, &errWithLocation); ok {
+		errWithLocation.Fname = fname
+		errWithLocation.Contents = arg
+		return errWithLocation
+
+	}
+	return err
 }
 
 func slurpFile(name string) (any, error) {

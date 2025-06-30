@@ -7,9 +7,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode/utf8"
-
-	"github.com/mattn/go-runewidth"
 
 	"github.com/itchyny/gojq"
 )
@@ -29,6 +26,12 @@ func (err *emptyError) ExitCode() int {
 		return err.ExitCode()
 	}
 	return exitCodeDefaultErr
+}
+
+// Unwrap is used to make it work with errors.Is, errors.As.
+func (e *emptyError) Unwrap() error {
+    // Return the inner error.
+    return e.err
 }
 
 type exitCodeError struct {
@@ -80,10 +83,10 @@ func (err *queryParseError) Error() string {
 	if errors.As(err.err, &e) {
 		offset = e.Offset - len(e.Token) + 1
 	}
-	linestr, line, column := getLineByOffset(err.contents, offset)
-	if err.fname != "<arg>" || containsNewline(err.contents) {
+	linestr, line, column := gojq.GetLineByOffset(err.contents, offset)
+	if err.fname != "<arg>" || gojq.ContainsNewline(err.contents) {
 		return fmt.Sprintf("invalid query: %s:%d\n%s  %s",
-			err.fname, line, formatLineInfo(linestr, line, column), err.err)
+			err.fname, line, gojq.FormatLineInfo(linestr, line, column), err.err)
 	}
 	return fmt.Sprintf("invalid query: %s\n    %s\n    %*c  %s",
 		err.contents, linestr, column+1, '^', err.err)
@@ -106,10 +109,10 @@ func (err *jsonParseError) Error() string {
 	} else if e, ok := err.err.(*json.SyntaxError); ok {
 		offset = int(e.Offset)
 	}
-	linestr, line, column := getLineByOffset(err.contents, offset)
+	linestr, line, column := gojq.GetLineByOffset(err.contents, offset)
 	if line += err.line; line > 1 {
 		return fmt.Sprintf("invalid json: %s:%d\n%s  %s",
-			err.fname, line, formatLineInfo(linestr, line, column), err.err)
+			err.fname, line, gojq.FormatLineInfo(linestr, line, column), err.err)
 	}
 	return fmt.Sprintf("invalid json: %s\n    %s\n    %*c  %s",
 		err.fname, linestr, column+1, '^', err.err)
@@ -132,116 +135,8 @@ func (err *yamlParseError) Error() string {
 	if i := strings.IndexByte(msg, '\n'); i >= 0 {
 		msg = msg[:i]
 	}
-	linestr := getLineByLine(err.contents, line)
+	linestr := gojq.GetLineByLine(err.contents, line)
 	return fmt.Sprintf("invalid yaml: %s:%d\n%s  %s",
-		err.fname, line, formatLineInfo(linestr, line, 0), msg)
+		err.fname, line, gojq.FormatLineInfo(linestr, line, 0), msg)
 }
 
-func getLineByOffset(str string, offset int) (linestr string, line, column int) {
-	ss := &stringScanner{str, 0}
-	for {
-		str, start, ok := ss.next()
-		if !ok {
-			offset -= start
-			break
-		}
-		line++
-		linestr = str
-		if ss.offset >= offset {
-			offset -= start
-			break
-		}
-	}
-	offset = min(max(offset-1, 0), len(linestr))
-	if offset > 48 {
-		skip := len(trimLastInvalidRune(linestr[:offset-48]))
-		linestr = linestr[skip:]
-		offset -= skip
-	}
-	linestr = trimLastInvalidRune(linestr[:min(64, len(linestr))])
-	if offset < len(linestr) {
-		offset = len(trimLastInvalidRune(linestr[:offset]))
-	} else {
-		offset = len(linestr)
-	}
-	column = runewidth.StringWidth(linestr[:offset])
-	return
-}
-
-func getLineByLine(str string, line int) (linestr string) {
-	ss := &stringScanner{str, 0}
-	for {
-		str, _, ok := ss.next()
-		if !ok {
-			break
-		}
-		if line--; line == 0 {
-			linestr = str
-			break
-		}
-	}
-	if len(linestr) > 64 {
-		linestr = trimLastInvalidRune(linestr[:64])
-	}
-	return
-}
-
-func trimLastInvalidRune(s string) string {
-	for i := len(s) - 1; i >= 0 && i > len(s)-utf8.UTFMax; i-- {
-		if b := s[i]; b < utf8.RuneSelf {
-			return s[:i+1]
-		} else if utf8.RuneStart(b) {
-			if r, _ := utf8.DecodeRuneInString(s[i:]); r == utf8.RuneError {
-				return s[:i]
-			}
-			break
-		}
-	}
-	return s
-}
-
-func formatLineInfo(linestr string, line, column int) string {
-	l := strconv.Itoa(line)
-	return fmt.Sprintf("    %s | %s\n    %*c", l, linestr, column+len(l)+4, '^')
-}
-
-type stringScanner struct {
-	str    string
-	offset int
-}
-
-func (ss *stringScanner) next() (line string, start int, ok bool) {
-	if ss.offset == len(ss.str) {
-		return
-	}
-	start, ok = ss.offset, true
-	line = ss.str[start:]
-	i := indexNewline(line)
-	if i < 0 {
-		ss.offset = len(ss.str)
-		return
-	}
-	line = line[:i]
-	if strings.HasPrefix(ss.str[start+i:], "\r\n") {
-		i++
-	}
-	ss.offset += i + 1
-	return
-}
-
-// Faster than strings.ContainsAny(str, "\r\n").
-func containsNewline(str string) bool {
-	return strings.IndexByte(str, '\n') >= 0 ||
-		strings.IndexByte(str, '\r') >= 0
-}
-
-// Faster than strings.IndexAny(str, "\r\n").
-func indexNewline(str string) (i int) {
-	if i = strings.IndexByte(str, '\n'); i >= 0 {
-		str = str[:i]
-	}
-	if j := strings.IndexByte(str, '\r'); j >= 0 {
-		i = j
-	}
-	return
-}

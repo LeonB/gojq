@@ -1044,7 +1044,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser.go.y:288
 		{
-			yyVAL.value = &Term{Type: TermTypeIndex, Index: &Index{Name: yyDollar[1].token.Str}}
+			yyVAL.value = &Term{Type: TermTypeIndex, Index: &Index{Name: yyDollar[1].token.Str, Location: yyDollar[1].token.Location}}
 		}
 	case 53:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -1085,19 +1085,19 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser.go.y:317
 		{
-			yyVAL.value = &Term{Type: TermTypeFunc, Func: &Func{Name: yyDollar[1].token.Str}}
+			yyVAL.value = &Term{Type: TermTypeFunc, Func: &Func{Name: yyDollar[1].token.Str, Location: yyDollar[1].token.Location}}
 		}
 	case 59:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser.go.y:321
 		{
-			yyVAL.value = &Term{Type: TermTypeFunc, Func: &Func{Name: yyDollar[1].token.Str, Args: yyDollar[3].value.([]*Query)}}
+			yyVAL.value = &Term{Type: TermTypeFunc, Func: &Func{Name: yyDollar[1].token.Str, Location: yyDollar[1].token.Location, Args: yyDollar[3].value.([]*Query)}}
 		}
 	case 60:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser.go.y:325
 		{
-			yyVAL.value = &Term{Type: TermTypeFunc, Func: &Func{Name: yyDollar[1].token.Str}}
+			yyVAL.value = &Term{Type: TermTypeFunc, Func: &Func{Name: yyDollar[1].token.Str, Location: yyDollar[1].token.Location}}
 		}
 	case 61:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -1211,7 +1211,7 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser.go.y:401
 		{
-			yyDollar[1].value.(*Term).SuffixList = append(yyDollar[1].value.(*Term).SuffixList, &Suffix{Index: &Index{Name: yyDollar[2].token.Str}})
+			yyDollar[1].value.(*Term).SuffixList = append(yyDollar[1].value.(*Term).SuffixList, &Suffix{Index: &Index{Name: yyDollar[2].token.Str, Location: yyDollar[2].token.Location}})
 		}
 	case 80:
 		yyDollar = yyS[yypt-2 : yypt+1]

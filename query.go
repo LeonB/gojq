@@ -201,6 +201,7 @@ type Term struct {
 	Break      string
 	Query      *Query
 	SuffixList []*Suffix
+	Location   Location
 }
 
 func (e *Term) String() string {
@@ -465,11 +466,12 @@ func (e *PatternObject) writeTo(s *strings.Builder) {
 
 // Index ...
 type Index struct {
-	Name    string
-	Str     *String
-	Start   *Query
-	End     *Query
-	IsSlice bool
+	Name     string
+	Str      *String
+	Start    *Query
+	End      *Query
+	IsSlice  bool
+	Location Location
 }
 
 func (e *Index) String() string {
@@ -559,8 +561,9 @@ func (e *Index) toIndices(xs []any) []any {
 
 // Func ...
 type Func struct {
-	Name string
-	Args []*Query
+	Name     string
+	Args     []*Query
+	Location Location
 }
 
 func (e *Func) String() string {

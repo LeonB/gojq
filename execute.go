@@ -2,6 +2,7 @@ package gojq
 
 import (
 	"context"
+	"log"
 	"math"
 	"reflect"
 	"sort"
@@ -10,11 +11,13 @@ import (
 func (env *env) execute(bc *Code, v any, vars ...any) Iter {
 	env.codes = bc.codes
 	env.codeinfos = bc.codeinfos
+	env.symbolTable = bc.symbolTable
 	env.push(v)
 	for i := len(vars) - 1; i >= 0; i-- {
 		env.push(vars[i])
 	}
 	env.debugCodes()
+	env.debugSymbolTable()
 	return env
 }
 
@@ -159,6 +162,7 @@ loop:
 			w := funcIndex2(nil, v, p)
 			if e, ok := w.(error); ok {
 				err = e
+				err = &ErrorWithLocation{Inner: e, Location: env.symbolTable.Lookup(pc).Location}
 				break loop
 			}
 			env.push(w)
@@ -313,7 +317,14 @@ loop:
 				}
 				break loop
 			default:
-				err = &iteratorError{v}
+				inner := &iteratorError{v}
+				log.Println("pc:", pc)
+				pc, _ = env.popscope()
+				log.Println("pc:", pc)
+				log.Println(env.symbolTable.String())
+				sym := env.symbolTable.Lookup(pc)
+				log.Println(sym.Location)
+				err = &ErrorWithLocation{Inner: inner, Location: env.symbolTable.Lookup(pc).Location}
 				env.push(emptyIter{})
 				break loop
 			}
